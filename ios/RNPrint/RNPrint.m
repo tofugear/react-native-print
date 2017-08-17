@@ -12,6 +12,21 @@
     return dispatch_get_main_queue();
 }
 
+-(NSDictionary*)constantsToExport{
+    return @{
+             @"Duplex": @{
+                     @"none": @(UIPrintInfoDuplexNone),
+                     @"longEdge": @(UIPrintInfoDuplexLongEdge),
+                     @"shortEdge": @(UIPrintInfoDuplexShortEdge)
+                     },
+             @"OutputType": @{
+                     @"general": @(UIPrintInfoOutputGeneral),
+                     @"photo": @(UIPrintInfoOutputPhoto),
+                     @"photoGrayscale": @(UIPrintInfoOutputPhotoGrayscale)
+                     }
+             };
+}
+
 RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(print:(NSDictionary *)options
@@ -24,6 +39,10 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
         _filePath = nil;
     }
     
+    if (options[@"file"]){
+        _filePath = [RCTConvert NSString:options[@"file"]];
+    }
+
     if (options[@"html"]){
         _htmlString = [RCTConvert NSString:options[@"html"]];
     } else {
@@ -33,6 +52,9 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     if (options[@"printerURL"]){
         _printerURL = [NSURL URLWithString:[RCTConvert NSString:options[@"printerURL"]]];
         _pickedPrinter = [UIPrinter printerWithURL:_printerURL];
+    } else {
+        _printerURL = nil;
+        _pickedPrinter = nil;
     }
     
     if(options[@"isLandscape"]) {
@@ -43,6 +65,16 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
         reject(RCTErrorUnspecified, nil, RCTErrorWithMessage(@"Must provide either `html` or `filePath`. Both are either missing or passed together"));
     }
     
+    UIPrintInfoDuplex duplex = UIPrintInfoDuplexNone;
+    if (options[@"duplex"]){
+        duplex = [(NSNumber*)(options[@"duplex"]) intValue];
+    }
+
+    UIPrintInfoOutputType outputType = UIPrintInfoOutputGeneral;
+    if (options[@"outputType"]){
+        outputType = [(NSNumber*)(options[@"outputType"]) intValue];
+    }
+
     NSData *printData;
     BOOL isValidURL = NO;
     NSURL *candidateURL = [NSURL URLWithString: _filePath];
@@ -63,13 +95,13 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     
     UIPrintInteractionController *printInteractionController = [UIPrintInteractionController sharedPrintController];
     printInteractionController.delegate = self;
-    
+
     // Create printing info
     UIPrintInfo *printInfo = [UIPrintInfo printInfo];
     
-    printInfo.outputType = UIPrintInfoOutputGeneral;
+    printInfo.outputType = outputType;
     printInfo.jobName = [_filePath lastPathComponent];
-    printInfo.duplex = UIPrintInfoDuplexLongEdge;
+    printInfo.duplex = duplex;
     printInfo.orientation = _isLandscape? UIPrintInfoOrientationLandscape: UIPrintInfoOrientationPortrait;
     
     printInteractionController.printInfo = printInfo;
@@ -94,15 +126,18 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     };
     
     if (_pickedPrinter) {
-        [printInteractionController printToPrinter:_pickedPrinter completionHandler:completionHandler];
-    } else if([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) { // iPad
-        UIView *view = [[UIApplication sharedApplication] keyWindow].rootViewController.view;
-        [printInteractionController presentFromRect:view.frame inView:view animated:YES completionHandler:completionHandler];
-    } else { // iPhone
+        [_pickedPrinter contactPrinter:^(BOOL available) {
+             if (available) {
+                 [printInteractionController printToPrinter:_pickedPrinter completionHandler:completionHandler];
+             } else {
+                 reject(RCTErrorUnspecified, nil, RCTErrorWithMessage(@"Printer not available"));
+             }
+         }
+         ];
+    } else {
         [printInteractionController presentAnimated:YES completionHandler:completionHandler];
     }
 }
-
 
 RCT_EXPORT_METHOD(selectPrinter:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
@@ -129,21 +164,6 @@ RCT_EXPORT_METHOD(selectPrinter:(NSDictionary *)options
             }
         }
     };
-    
-    if([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) { // iPad
-        UIView *view = [[UIApplication sharedApplication] keyWindow].rootViewController.view;
-        CGFloat _x = 0;
-        CGFloat _y = 0;
-        if (options[@"x"]){
-            _x = [RCTConvert CGFloat:options[@"x"]];
-        }
-        if (options[@"y"]){
-            _y = [RCTConvert CGFloat:options[@"y"]];
-        }
-        [printPicker presentFromRect:CGRectMake(_x, _y, 0, 0) inView:view animated:YES completionHandler:completionHandler];
-    } else { // iPhone
-        [printPicker presentAnimated:YES completionHandler:completionHandler];
-    }
 }
 
 #pragma mark - UIPrintInteractionControllerDelegate
@@ -156,6 +176,7 @@ RCT_EXPORT_METHOD(selectPrinter:(NSDictionary *)options
     return result;
 }
 
+
 -(void)printInteractionControllerWillDismissPrinterOptions:(UIPrintInteractionController*)printInteractionController {}
 
 -(void)printInteractionControllerDidDismissPrinterOptions:(UIPrintInteractionController*)printInteractionController {}
@@ -167,6 +188,23 @@ RCT_EXPORT_METHOD(selectPrinter:(NSDictionary *)options
 -(void)printInteractionControllerWillStartJob:(UIPrintInteractionController*)printInteractionController {}
 
 -(void)printInteractionControllerDidFinishJob:(UIPrintInteractionController*)printInteractionController {}
+
+- (UIPrintPaper *)printInteractionController:(UIPrintInteractionController *)printInteractionController
+                                 choosePaper:(NSArray<UIPrintPaper *> *)paperList{
+
+    UIPrintPaper* paper = nil;
+    for (UIPrintPaper* apaper in paperList){
+        if (CGSizeEqualToSize(apaper.paperSize, CGSizeMake(612, 792)) ){ // A4 paper size
+            paper = apaper;
+            break;
+        }
+    }
+    if (!paper){
+        paper = [UIPrintPaper bestPaperForPageSize:CGSizeMake(842, 595) withPapersFromArray:paperList]; // A4 pixel size
+    }
+    return paper;
+
+}
 
 +(BOOL)requiresMainQueueSetup
 {
