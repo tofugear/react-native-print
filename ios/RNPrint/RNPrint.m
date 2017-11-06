@@ -142,4 +142,20 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
 
 -(void)printInteractionControllerDidFinishJob:(UIPrintInteractionController*)printInteractionController {}
 
+- (UIPrintPaper *)printInteractionController:(UIPrintInteractionController *)printInteractionController
+                                 choosePaper:(NSArray<UIPrintPaper *> *)paperList{
+
+    UIPrintPaper* paper = nil;
+    for (UIPrintPaper* apaper in paperList){
+        if (CGSizeEqualToSize(apaper.paperSize, CGSizeMake(612, 792)) ){ // A4 paper size
+            paper = apaper;
+            break;
+        }
+    }
+    if (!paper){
+        paper = [UIPrintPaper bestPaperForPageSize:CGSizeMake(842, 595) withPapersFromArray:paperList]; // A4 pixel size
+    }
+    return paper;
+
+}
 @end
