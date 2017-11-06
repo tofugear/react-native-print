@@ -12,6 +12,21 @@
     return dispatch_get_main_queue();
 }
 
+-(NSDictionary*)constantsToExport{
+    return @{
+             @"Duplex": @{
+                     @"none": @(UIPrintInfoDuplexNone),
+                     @"longEdge": @(UIPrintInfoDuplexLongEdge),
+                     @"shortEdge": @(UIPrintInfoDuplexShortEdge)
+                     },
+             @"OutputType": @{
+                     @"general": @(UIPrintInfoOutputGeneral),
+                     @"photo": @(UIPrintInfoOutputPhoto),
+                     @"photoGrayscale": @(UIPrintInfoOutputPhotoGrayscale)
+                     }
+             };
+}
+
 RCT_EXPORT_MODULE();
 
 RCT_EXPORT_METHOD(selectPrinter:(RCTPromiseResolveBlock)resolve
@@ -54,6 +69,16 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
         _pickedPrinter = [UIPrinter printerWithURL:_printerURL];
     }
 
+    UIPrintInfoDuplex duplex = UIPrintInfoDuplexNone;
+    if (options[@"duplex"]){
+        duplex = [(NSNumber*)(options[@"duplex"]) intValue];
+    }
+
+    UIPrintInfoOutputType outputType = UIPrintInfoOutputPhoto;
+    if (options[@"outputType"]){
+        outputType = [(NSNumber*)(options[@"outputType"]) intValue];
+    }
+
     NSData *printData = [NSData dataWithContentsOfFile:_filePath];
     UIPrintInteractionController *printInteractionController = [UIPrintInteractionController sharedPrintController];
     printInteractionController.delegate = self;
@@ -61,9 +86,9 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     // Create printing info
     UIPrintInfo *printInfo = [UIPrintInfo printInfo];
 
-    printInfo.outputType = UIPrintInfoOutputGeneral;
+    printInfo.outputType = outputType;
     printInfo.jobName = [_filePath lastPathComponent];
-    printInfo.duplex = UIPrintInfoDuplexLongEdge;
+    printInfo.duplex = duplex;
 
     printInteractionController.printInfo = printInfo;
     printInteractionController.showsPageRange = YES;
@@ -81,7 +106,14 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     };
 
     if (_pickedPrinter) {
-        [printInteractionController printToPrinter:_pickedPrinter completionHandler:completionHandler];
+        [_pickedPrinter contactPrinter:^(BOOL available) {
+             if (available) {
+                 [printInteractionController printToPrinter:_pickedPrinter completionHandler:completionHandler];
+             } else {
+                 reject(RCTErrorUnspecified, nil, RCTErrorWithMessage(@"Printer not available"));
+             }
+         }
+         ];
     } else {
         [printInteractionController presentAnimated:YES completionHandler:completionHandler];
     }
