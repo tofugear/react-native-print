@@ -67,6 +67,9 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
     if (options[@"printerURL"]){
         _printerURL = [NSURL URLWithString:[RCTConvert NSString:options[@"printerURL"]]];
         _pickedPrinter = [UIPrinter printerWithURL:_printerURL];
+    } else {
+        _printerURL = nil;
+        _pickedPrinter = nil;
     }
 
     UIPrintInfoDuplex duplex = UIPrintInfoDuplexNone;
