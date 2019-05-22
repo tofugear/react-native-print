@@ -77,7 +77,7 @@ RCT_EXPORT_METHOD(print:(NSDictionary *)options
         duplex = [(NSNumber*)(options[@"duplex"]) intValue];
     }
 
-    UIPrintInfoOutputType outputType = UIPrintInfoOutputPhoto;
+    UIPrintInfoOutputType outputType = UIPrintInfoOutputGeneral;
     if (options[@"outputType"]){
         outputType = [(NSNumber*)(options[@"outputType"]) intValue];
     }
